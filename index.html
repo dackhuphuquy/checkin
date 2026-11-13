@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="vi"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Ăn gì Phú Quý</title>
+<link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;600;800&display=swap" rel="stylesheet">
+<style>
+:root{--bien:#0B5563;--nang:#FFB703;--sanho:#E4572E;--nen:#F1F7F7;--muc:#10262B;--xam:#6b7f84}
+*{box-sizing:border-box}body{margin:0;font-family:'Be Vietnam Pro',system-ui,sans-serif;background:var(--nen);color:var(--muc);padding-bottom:76px}
+header{background:var(--bien);color:#fff;padding:12px 16px;display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;z-index:5}
+header b{font-size:18px;font-weight:800}header small{display:block;opacity:.8;font-size:11px}
+button,.btn{font:inherit;border:0;border-radius:999px;padding:9px 16px;background:var(--bien);color:#fff;cursor:pointer;font-weight:600}
+button.alt{background:#fff;color:var(--bien);border:1.5px solid var(--bien)}button.red{background:var(--sanho)}button.sun{background:var(--nang);color:var(--muc)}
+main{max-width:640px;margin:0 auto;padding:14px}
+.card{background:#fff;border-radius:22px;overflow:hidden;margin-bottom:14px;box-shadow:0 2px 10px #0b55631a;cursor:pointer}
+.card img.cv{width:100%;aspect-ratio:4/3;object-fit:cover;display:block}.card .in{padding:12px 14px}
+.card h3{margin:0 0 4px;font-size:18px}.meta{color:var(--xam);font-size:13px;display:flex;gap:10px;flex-wrap:wrap}
+.star{color:var(--nang);letter-spacing:1px}.box{background:#fff;border-radius:18px;padding:14px;margin-bottom:12px}
+input,textarea,select{width:100%;font:inherit;padding:11px 14px;border:1.5px solid #cfdcde;border-radius:14px;margin:4px 0 10px;background:#fff}
+label{font-weight:600;font-size:14px}h2{margin:6px 0 12px}.err{color:var(--sanho);font-weight:600;font-size:14px}
+nav{position:fixed;bottom:0;left:0;right:0;background:#fff;display:flex;justify-content:space-around;padding:8px 0 10px;box-shadow:0 -2px 12px #0b55631f;z-index:6}
+nav a{flex:1;text-align:center;font-size:12px;color:var(--xam);cursor:pointer;font-weight:600;text-decoration:none}nav a.on{color:var(--bien)}nav a span{display:block;font-size:22px}
+.gal{display:flex;gap:8px;overflow-x:auto;scroll-snap-type:x mandatory;margin-bottom:10px}.gal img{height:260px;border-radius:18px;scroll-snap-align:start;flex:none;max-width:92%;object-fit:cover}
+.thumbs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px}.thumbs img{width:64px;height:64px;object-fit:cover;border-radius:10px}
+.tag{display:inline-block;padding:2px 10px;border-radius:99px;background:#e3eff0;font-size:12px;font-weight:600}.tag.p{background:#ffeab3}
+.row{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0}.cm{border-top:1px solid #e3eaeb;padding:8px 0;font-size:14px}
+</style></head><body>
+<header><div><b>🏝️ Ăn gì Phú Quý</b><small id="who">Món ngon của cô chú trên đảo</small></div><button class="sun" id="authBtn"></button></header>
+<main id="app"></main>
+<nav id="nav"></nav>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script>
+/* ====== CẤU HÌNH: sửa 3 chỗ này ====== */
+const CFG={apiKey:"AIzaSyD0EMi6SKsiOxa-IfkLXSWmVyuyjfRO__4",authDomain:"checkin-1ec27.firebaseapp.com",projectId:"checkin-1ec27",appId:"1:468371798701:web:552cbe43ee997965792424"};          // dán từ Firebase
+const ADMINS=["duykhanh2605.pq@gmail.com"];                              // email admin (chữ thường)
+const MAIL={service:"service_icsproc",tpl:"template_i99dtth",pub:"TIdSaMWaJVowZHqq_"};   // EmailJS: Service ID, Template ID, Public Key (xem hướng dẫn)
+const ZALO="https://zalo.me/0867812605";                             // link Zalo admin
+/* ===================================== */
+firebase.initializeApp(CFG);const auth=firebase.auth(),db=firebase.firestore(),FV=firebase.firestore.FieldValue;
+let user=null,isAdmin=false,posts=[],tab='home',busy=false;
+const $=s=>document.querySelector(s),app=$('#app');
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const stars=n=>'<span class="star">'+'★'.repeat(n)+'☆'.repeat(5-n)+'</span>';
+const fmt=t=>t&&t.toDate?t.toDate().toLocaleString('vi-VN',{hour:'2-digit',minute:'2-digit',day:'2-digit',month:'2-digit',year:'numeric'}):'';
+const mask=(e,full)=>{if(full||!e)return e||'';const i=e.indexOf('@');return e.slice(0,3)+'*'.repeat(Math.max(i-3,1))+e.slice(i)};
+const bad=e=>/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e||'')?false:true;
+
+let ready;const first=new Promise(r=>ready=r);
+auth.onAuthStateChanged(u=>{if(!u){auth.signInAnonymously().catch(e=>{alert('Cần bật Anonymous trong Firebase Authentication: '+e.message);ready()});return}
+ user=u;isAdmin=!!u.email&&ADMINS.includes(u.email.toLowerCase());
+ $('#authBtn').textContent=u.isAnonymous?'Admin':'Thoát';$('#who').textContent=isAdmin?'Admin · '+u.email:'Món ngon của cô chú trên đảo';ready();route()});
+$('#authBtn').onclick=()=>user&&!user.isAnonymous?auth.signOut():login();
+function login(){return auth.signInWithPopup(new firebase.auth.GoogleAuthProvider()).catch(e=>alert('Không đăng nhập được: '+e.message))}
+function navBar(){const t=[['home','🏠','Trang chủ'],['post','📸','Đăng bài'],isAdmin?['msg','✉️','Lời nhắn']:['zalo','💬','Zalo']];if(isAdmin)t.push(['admin','🛠️','Quản lý']);
+ $('#nav').innerHTML=t.map(x=>`<a data-t="${x[0]}" class="${tab===x[0]?'on':''}"><span>${x[1]}</span>${x[2]}</a>`).join('');
+ document.querySelectorAll('nav a').forEach(a=>a.onclick=()=>go(a.dataset.t))}
+function go(t){if(t==='zalo'){window.open(ZALO,'_blank');return}history.replaceState(null,'',location.pathname);tab=t;route()}
+function route(){navBar();const p=new URLSearchParams(location.search).get('p');
+ if(p)return detail(p);({home,post:postForm,admin:adminView,msg:msgView}[tab]||home)()}
+
+/* ---- Trang chủ ---- */
+async function home(){app.innerHTML='<p>Đang tải…</p>';
+ const [s,c]=await Promise.all([db.collection('posts').where('status','==','approved').get(),
+  db.collection('reports').where('type','==','comment').where('status','==','approved').get().catch(()=>({docs:[]}))]);
+ const cc={};c.docs.forEach(d=>{const k=d.data().postId;cc[k]=(cc[k]||0)+1});
+ posts=s.docs.map(d=>({id:d.id,...d.data(),cmt:cc[d.id]||0}));
+ app.innerHTML='<input id="q" placeholder="🔍 Tìm theo món ăn hoặc số sao (1-5)…"><select id="so"><option value="new">🕒 Duyệt gần nhất</option><option value="feat">🌟 Bài viết nổi bật</option><option value="star">⭐ Sao cao → thấp</option><option value="cmt">💬 Nhiều nhận xét nhất</option><option value="view">👁 Nhiều lượt xem nhất</option></select><div id="list"></div>';
+ const T=p=>p.approvedAt?.seconds||0,K={new:T,feat:T,star:p=>p.rating,cmt:p=>p.cmt,view:p=>p.views||0};
+ const draw=()=>{const q=$('#q').value.trim().toLowerCase(),f=$('#so').value,k=K[f];
+  const r=posts.filter(p=>(f!=='feat'||p.featured)&&(!q||p.food.toLowerCase().includes(q)||String(p.rating)===q.replace(/\D/g,''))).sort((a,b)=>k(b)-k(a)||T(b)-T(a));
+  $('#list').innerHTML=r.length?r.map(card).join(''):(f==='feat'?'<p>Chưa có bài nổi bật nào.</p>':'<p>Chưa có bài phù hợp. Bạn thử đăng bài đầu tiên nhé!</p>');
+  document.querySelectorAll('.card').forEach(c=>c.onclick=()=>openPost(c.dataset.id))};
+ $('#q').oninput=draw;$('#so').onchange=draw;draw()}
+const card=p=>`<div class="card" data-id="${p.id}">${p.images?.[0]?`<img class="cv" src="${p.images[0]}">`:''}<div class="in"><h3>${p.featured?'🌟 ':''}${esc(p.seller)}</h3>
+ <div class="meta"><span>🍜 ${esc(p.food)}</span><span>🕗 ${esc(p.time)}</span></div>
+ <div class="meta" style="margin-top:4px">${stars(p.rating)}<span>Duyệt ${fmt(p.approvedAt)}</span><span>👁 ${p.views||0}</span><span>💬 ${p.cmt||0}</span></div></div></div>`;
+function openPost(id){history.pushState(null,'','?p='+id);detail(id,true)}
+addEventListener('popstate',route);
+
+/* ---- Chi tiết ---- */
+async function detail(id,count){app.innerHTML='<p>Đang tải…</p>';
+ const ref=db.collection('posts').doc(id);let d;
+ try{d=await ref.get()}catch(e){d=null}
+ if(!d||!d.exists){app.innerHTML='<p>Bài viết không tồn tại hoặc chưa được duyệt.</p><button onclick="go(\'home\')">Về trang chủ</button>';return}
+ const p=d.data();let pm='';if(isAdmin){try{pm=(await db.collection('mails').doc('post_'+id).get()).data()?.email||''}catch(e){}}
+ if(p.status==='approved'){ref.update({views:FV.increment(1)}).catch(()=>{});p.views=(p.views||0)+1}
+ let cms=[];try{const c=await db.collection('reports').where('postId','==',id).where('type','==','comment').where('status','==','approved').get();cms=c.docs.map(x=>x.data())}catch(e){}
+ app.innerHTML=`<button class="alt" onclick="go('${tab}')">← Quay lại</button><h2>${esc(p.seller)} ${p.status!=='approved'?'<span class="tag p">Chờ duyệt</span>':''}</h2>
+ <div class="gal">${(p.images||[]).map(i=>`<img src="${i}">`).join('')}</div>
+ <div class="box"><div class="meta">${stars(p.rating)}<span>👁 ${p.views||0} lượt xem</span></div>
+ <p><b>🍜 Món:</b> ${esc(p.food)}<br><b>🕗 Giờ bán:</b> ${esc(p.time)}<br><b>📍 Địa chỉ:</b> ${esc(p.address)}</p>
+ <p style="white-space:pre-wrap">${esc(p.content)}</p>
+ <div class="meta">Người viết: ${esc(isAdmin?(pm||p.email||''):(p.emailMask||mask(p.email)))} · Duyệt: ${fmt(p.approvedAt)||'—'}</div>
+ <div class="row"><button id="bc">💬 Nhận xét</button><button class="alt" id="bl">🔗 Copy link</button><button class="alt" id="br">🚩 Yêu cầu gỡ</button>${isAdmin&&p.status==='approved'?`<button class="sun" id="bf">${p.featured?'Bỏ nổi bật':'🌟 Nổi bật'}</button>`:''}${isAdmin?'<button class="red" id="bd">🗑 Xoá bài</button>':''}</div></div>
+ <div id="rf"></div><h3>Nhận xét (${cms.length})</h3>
+ ${cms.map(c=>`<div class="cm">${esc(c.content)}<div class="meta">${esc(c.emailMask||mask(c.email))} · ${fmt(c.createdAt)}</div></div>`).join('')||'<p class="meta">Chưa có nhận xét nào.</p>'}`;
+ $('#bl').onclick=()=>navigator.clipboard.writeText(location.origin+location.pathname+'?p='+id).then(()=>alert('Đã copy link!'));
+ $('#bc').onclick=()=>reportForm(id,'comment');$('#br').onclick=()=>reportForm(id,'remove');
+ if(isAdmin)$('#bd').onclick=()=>delPost(id,true);
+ if($('#bf'))$('#bf').onclick=async()=>{p.featured=!p.featured;await ref.update({featured:p.featured});$('#bf').textContent=p.featured?'Bỏ nổi bật':'🌟 Nổi bật'}}
+async function reportForm(id,type){await first;
+ $('#rf').innerHTML=`<div class="box"><b>${type==='comment'?'Gửi nhận xét':'Yêu cầu gỡ bài'}</b><br><label>Nội dung *</label><textarea id="rc" rows="3"></textarea>
+ <label>Email của bạn *</label><input id="re" type="email" placeholder="ten@gmail.com"><div class="err" id="rerr"></div><button id="rs">Gửi cho admin duyệt</button></div>`;
+ $('#rs').onclick=async()=>{const c=$('#rc').value.trim(),e=$('#re').value.trim();
+  if(!c||bad(e)){$('#rerr').textContent='Vui lòng điền nội dung và email hợp lệ.';return}
+  const rr=db.collection('reports').doc(),bt=db.batch();
+  bt.set(rr,{postId:id,type,content:c,emailMask:mask(e),uid:user.uid,status:'pending',createdAt:FV.serverTimestamp()});
+  bt.set(db.collection('mails').doc('rep_'+rr.id),{email:e});await bt.commit();
+  $('#rf').innerHTML='<div class="box">✅ Đã gửi. Admin sẽ xem xét sớm.</div>'}}
+async function delPost(id,back){if(!confirm('Xoá bài này?'))return;if(!confirm('Chắc chắn xoá? Không thể khôi phục.'))return;
+ await db.collection('posts').doc(id).delete();db.collection('mails').doc('post_'+id).delete().catch(()=>{});history.replaceState(null,'',location.pathname);back?go('home'):adminView()}
+
+/* ---- Đăng bài ---- */
+let imgs=[];
+function postForm(){imgs=[];
+ 
+ const f=(id,l,ph)=>`<label>${l} *</label><input id="${id}" placeholder="${ph}">`;
+ app.innerHTML=`<h2>Đăng bài mới</h2><div class="box">${f('seller','Tên người bán','Bánh căn cô 9')}${f('food','Thực phẩm','Bánh căn')}${f('time','Thời gian bán','8:00 - 16:00')}${f('addr','Địa chỉ','123 Trần Hưng Đạo')}
+ <label>Ảnh * (tối đa 5, vui lòng up ảnh chụp bằng camera thường!)</label><input id="files" type="file" accept="image/*" multiple><div class="thumbs" id="th"></div>
+ <label>Nội dung bài viết *</label><textarea id="ct" rows="4"></textarea>
+ <label>Đánh giá *</label><select id="rt"><option value="">Chọn số sao</option>${[5,4,3,2,1].map(n=>`<option value="${n}">${'⭐'.repeat(n)}</option>`).join('')}</select></div>
+ <div class="box"><b>NGƯỜI VIẾT BÀI</b><br><label>Email (để nhận thông báo duyệt/xoá) *</label><input id="em" type="email" placeholder="ten@gmail.com">
+ <label style="display:flex;gap:8px;font-weight:400"><input type="checkbox" id="ok" style="width:auto;margin-top:4px">Tôi đồng ý cung cấp thông tin và xác nhận nội dung viết là đúng sự thật.</label>
+ <div class="err" id="err"></div><button id="send">Gửi duyệt</button></div>`;
+ $('#files').onchange=async e=>{for(const f of e.target.files){if(imgs.length>=5){alert('Tối đa 5 ảnh');break}imgs.push(await shrink(f))}e.target.value='';$('#th').innerHTML=imgs.map(i=>`<img src="${i}">`).join('')};
+ $('#send').onclick=submitPost}
+function shrink(file){return new Promise(r=>{const im=new Image();im.onload=()=>{const s=Math.min(1,640/Math.max(im.width,im.height)),c=document.createElement('canvas');c.width=im.width*s;c.height=im.height*s;c.getContext('2d').drawImage(im,0,0,c.width,c.height);r(c.toDataURL('image/jpeg',.55))};im.src=URL.createObjectURL(file)})}
+async function submitPost(){if(busy)return;await first;const v=id=>$('#'+id).value.trim();
+ const d={seller:v('seller'),food:v('food'),time:v('time'),address:v('addr'),content:v('ct'),rating:+v('rt'),email:v('em')};
+ const miss=Object.entries(d).some(([k,x])=>!x)||!imgs.length||bad(d.email);
+ if(miss||!$('#ok').checked){$('#err').textContent='Vui lòng điền đủ tất cả mục, thêm ít nhất 1 ảnh, email hợp lệ và tick xác nhận.';return}
+ busy=true;$('#send').textContent='Đang gửi…';
+ try{const {email,...pub}=d,pr=db.collection('posts').doc(),bt=db.batch();
+  bt.set(pr,{...pub,emailMask:mask(email),images:imgs,uid:user.uid,status:'pending',views:0,createdAt:FV.serverTimestamp()});
+  bt.set(db.collection('mails').doc('post_'+pr.id),{email});await bt.commit();
+  app.innerHTML='<div class="box"><h2>✅ Đã gửi duyệt</h2><p>Admin sẽ duyệt bài sớm. Cảm ơn bạn đã giới thiệu món ngon Phú Quý!</p><button onclick="go(\'home\')">Về trang chủ</button></div>'}
+ catch(e){$('#err').textContent='Gửi lỗi (ảnh quá nặng?): '+e.message;$('#send').textContent='Gửi duyệt'}busy=false}
+
+/* ---- Admin ---- */
+async function adminView(){if(!isAdmin){app.innerHTML='<p>Chỉ admin mới xem được mục này.</p>';return}
+ app.innerHTML='<p>Đang tải…</p>';
+ const [a,b,m]=await Promise.all([db.collection('posts').get(),db.collection('reports').where('status','==','pending').get(),db.collection('mails').get()]);
+ const M={};m.docs.forEach(d=>M[d.id]=d.data().email);
+ const ps=a.docs.map(d=>({id:d.id,...d.data(),email:M['post_'+d.id]||d.data().email})).sort((x,y)=>(y.createdAt?.seconds||0)-(x.createdAt?.seconds||0));
+ const rs=b.docs.map(d=>({id:d.id,...d.data(),email:M['rep_'+d.id]||d.data().email}));
+ const mail=(e,s)=>`<a href="mailto:${esc(e)}?subject=${encodeURIComponent(s)}">✉️ Gửi mail</a>`;
+ app.innerHTML=`<h2>Quản lý</h2><h3>Nhận xét / yêu cầu gỡ chờ duyệt (${rs.length})</h3>
+ ${rs.map(r=>`<div class="box"><span class="tag ${r.type==='remove'?'p':''}">${r.type==='remove'?'Yêu cầu gỡ':'Nhận xét'}</span> <a href="?p=${r.postId}" target="_blank">xem bài</a>
+ <p style="white-space:pre-wrap">${esc(r.content)}</p><div class="meta">${esc(r.email)} · ${fmt(r.createdAt)} · ${mail(r.email,'Về nhận xét/yêu cầu của bạn')}</div>
+ <div class="row"><button data-a="ok" data-id="${r.id}">Duyệt</button><button class="alt" data-a="no" data-id="${r.id}">Từ chối</button>${r.type==='remove'?`<button class="red" data-a="rm" data-id="${r.id}" data-p="${r.postId}">Gỡ bài</button>`:''}</div></div>`).join('')||'<p class="meta">Không có.</p>'}
+ <h3 id="pc"></h3><input id="aq" placeholder="🔍 Tìm theo tên quán, món hoặc email người đăng…"><div id="ap"></div>`;
+ const postHtml=L=>L.map(p=>`<div class="box"><b>${esc(p.seller)}</b> — ${esc(p.food)} ${stars(p.rating)} <span class="tag ${p.status==='approved'?'':'p'}">${({approved:'Đã duyệt',rejected:'Đã từ chối'})[p.status]||'Chờ duyệt'}</span>
+ <div class="meta">${esc(p.email)} · ${fmt(p.createdAt)} · ${mail(p.email,'Về bài đăng "'+p.seller+'" trên Ăn gì Phú Quý')}</div>
+ <div class="row">${p.status!=='approved'?`<button data-a="pa" data-id="${p.id}">Duyệt bài</button>`:''}${p.status==='pending'?`<button class="alt" data-a="rj" data-id="${p.id}">Từ chối</button>`:''}<button class="alt" data-a="view" data-id="${p.id}">Xem</button>${p.status==='approved'?`<button class="sun" data-a="ft" data-id="${p.id}" data-v="${p.featured?0:1}">${p.featured?'Bỏ nổi bật':'🌟 Nổi bật'}</button>`:''}<button class="red" data-a="del" data-id="${p.id}">Xoá</button></div></div>`).join('');
+ const bind=()=>app.querySelectorAll('button[data-a]').forEach(b=>b.onclick=async()=>{const id=b.dataset.id,a=b.dataset.a;
+  if(a==='ok')await db.collection('reports').doc(id).update({status:'approved'});
+  if(a==='no')await db.collection('reports').doc(id).update({status:'rejected'});
+  if(a==='rm'){if(!confirm('Gỡ bài này?')||!confirm('Chắc chắn gỡ?'))return;await db.collection('posts').doc(b.dataset.p).delete();await db.collection('reports').doc(id).update({status:'approved'})}
+  if(a==='pa'||a==='rj'){const p=ps.find(x=>x.id===id),ok=a==='pa';let why='';
+   if(!ok){why=prompt('Lý do từ chối (không bắt buộc, sẽ gửi kèm cho người đăng):');if(why===null)return}
+   await db.collection('posts').doc(id).update(ok?{status:'approved',approvedAt:FV.serverTimestamp()}:{status:'rejected'});
+   const er=await notify(p,id,ok,why);alert(er?'Đã cập nhật bài nhưng gửi mail lỗi: '+er:'Đã gửi mail cho '+p.email)}
+  if(a==='ft')await db.collection('posts').doc(id).update({featured:b.dataset.v==='1'});
+  if(a==='del')return delPost(id,false);
+  if(a==='view')return openPost(id);
+  adminView()});
+ const drawP=()=>{const q=$('#aq').value.trim().toLowerCase();
+  const r=ps.filter(p=>!q||[p.seller,p.food,p.email,p.address].some(x=>(x||'').toLowerCase().includes(q)));
+  $('#pc').textContent='Bài đăng ('+r.length+(q?'/'+ps.length:'')+')';
+  $('#ap').innerHTML=postHtml(r)||'<p class="meta">Không tìm thấy bài nào.</p>';bind()};
+ $('#aq').oninput=drawP;drawP()}
+/* ---- Mail tự động (EmailJS) + Lời nhắn ---- */
+const DEF_OK='Chào bạn,\nBài đăng "{ten}" của bạn đã được duyệt và hiển thị trên Ăn gì Phú Quý.\nXem bài: {link}\nCảm ơn bạn đã giới thiệu món ngon Phú Quý!';
+const DEF_NO='Chào bạn,\nBài đăng "{ten}" của bạn chưa được duyệt. Cảm ơn bạn đã gửi bài cho Ăn gì Phú Quý.';
+const getSt=()=>db.collection('settings').doc('mail').get().then(d=>d.data()||{}).catch(()=>({}));
+async function sendMail(to,subject,message){
+ if(!MAIL.pub||!MAIL.service||!MAIL.tpl)return 'chưa điền cấu hình MAIL (EmailJS) trong file';
+ if(!to)return 'bài này không có email';
+ try{const r=await fetch('https://api.emailjs.com/api/v1.0/email/send',{method:'POST',headers:{'Content-Type':'application/json'},
+  body:JSON.stringify({service_id:MAIL.service,template_id:MAIL.tpl,user_id:MAIL.pub,template_params:{to_email:to,subject,message}})});
+  return r.ok?'':(await r.text())}catch(e){return e.message}}
+async function notify(p,id,ok,why){const st=await getSt(),link=location.origin+location.pathname+'?p='+id;
+ let body=(ok?st.ok:st.no)||(ok?DEF_OK:DEF_NO);body=body.replaceAll('{ten}',p.seller).replaceAll('{link}',link);
+ if(why)body+='\n\nLý do: '+why;
+ return sendMail(p.email,ok?'Ăn gì Phú Quý: bài đăng của bạn đã được duyệt':'Ăn gì Phú Quý: bài đăng của bạn chưa được duyệt',body)}
+async function msgView(){if(!isAdmin){app.innerHTML='<p>Chỉ admin mới dùng được mục này.</p>';return}
+ const st=await getSt();
+ app.innerHTML=`<h2>Lời nhắn gửi người đăng</h2><div class="box"><p class="meta">Khi bạn bấm Duyệt hoặc Từ chối, web tự gửi mail cho người đăng với nội dung dưới đây. Dùng <b>{ten}</b> = tên quán, <b>{link}</b> = link bài.</p>
+ <label>Lời nhắn khi DUYỆT</label><textarea id="mo" rows="6">${esc(st.ok??DEF_OK)}</textarea>
+ <label>Lời nhắn khi TỪ CHỐI</label><textarea id="mn" rows="6">${esc(st.no??DEF_NO)}</textarea>
+ <button id="ms">Lưu lời nhắn</button> <span id="mm" class="meta"></span></div>`;
+ $('#ms').onclick=async()=>{try{await db.collection('settings').doc('mail').set({ok:$('#mo').value,no:$('#mn').value});$('#mm').textContent='✅ Đã lưu'}catch(e){$('#mm').textContent='Lỗi: '+e.message}}}
+route();
+</script></body></html>
