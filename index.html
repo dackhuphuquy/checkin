@@ -108,8 +108,15 @@ async function reportForm(id,type){await first;
   bt.set(rr,{postId:id,type,content:c,emailMask:mask(e),uid:user.uid,status:'pending',createdAt:FV.serverTimestamp()});
   bt.set(db.collection('mails').doc('rep_'+rr.id),{email:e});await bt.commit();
   $('#rf').innerHTML='<div class="box">✅ Đã gửi. Admin sẽ xem xét sớm.</div>'}}
+async function removePost(id,why){
+ const [pd,md]=await Promise.all([db.collection('posts').doc(id).get(),db.collection('mails').doc('post_'+id).get()]);
+ const p=pd.data()||{};p.email=md.data()?.email||p.email;
+ await db.collection('posts').doc(id).delete();db.collection('mails').doc('post_'+id).delete().catch(()=>{});
+ const er=p.seller?await notify(p,id,'del',why):'';
+ alert(er?'Đã xoá bài nhưng gửi mail lỗi: '+er:'Đã xoá bài'+(p.email?' và gửi mail cho '+p.email:''))}
 async function delPost(id,back){if(!confirm('Xoá bài này?'))return;if(!confirm('Chắc chắn xoá? Không thể khôi phục.'))return;
- await db.collection('posts').doc(id).delete();db.collection('mails').doc('post_'+id).delete().catch(()=>{});history.replaceState(null,'',location.pathname);back?go('home'):adminView()}
+ const why=prompt('Lý do xoá (không bắt buộc, sẽ gửi kèm cho người đăng):');if(why===null)return;
+ await removePost(id,why);history.replaceState(null,'',location.pathname);back?go('home'):adminView()}
 
 /* ---- Đăng bài ---- */
 let imgs=[];
@@ -156,7 +163,7 @@ async function adminView(){if(!isAdmin){app.innerHTML='<p>Chỉ admin mới xem 
  const bind=()=>app.querySelectorAll('button[data-a]').forEach(b=>b.onclick=async()=>{const id=b.dataset.id,a=b.dataset.a;
   if(a==='ok')await db.collection('reports').doc(id).update({status:'approved'});
   if(a==='no')await db.collection('reports').doc(id).update({status:'rejected'});
-  if(a==='rm'){if(!confirm('Gỡ bài này?')||!confirm('Chắc chắn gỡ?'))return;await db.collection('posts').doc(b.dataset.p).delete();await db.collection('reports').doc(id).update({status:'approved'})}
+  if(a==='rm'){if(!confirm('Gỡ bài này?')||!confirm('Chắc chắn gỡ?'))return;const why=prompt('Lý do gỡ (không bắt buộc, sẽ gửi kèm cho người đăng):');if(why===null)return;await removePost(b.dataset.p,why);await db.collection('reports').doc(id).update({status:'approved'})}
   if(a==='pa'||a==='rj'){const p=ps.find(x=>x.id===id),ok=a==='pa';let why='';
    if(!ok){why=prompt('Lý do từ chối (không bắt buộc, sẽ gửi kèm cho người đăng):');if(why===null)return}
    await db.collection('posts').doc(id).update(ok?{status:'approved',approvedAt:FV.serverTimestamp()}:{status:'rejected'});
@@ -173,6 +180,7 @@ async function adminView(){if(!isAdmin){app.innerHTML='<p>Chỉ admin mới xem 
 /* ---- Mail tự động (EmailJS) + Lời nhắn ---- */
 const DEF_OK='Chào bạn,\nBài đăng "{ten}" của bạn đã được duyệt và hiển thị trên Ăn gì Phú Quý.\nXem bài: {link}\nCảm ơn bạn đã giới thiệu món ngon Phú Quý!';
 const DEF_NO='Chào bạn,\nBài đăng "{ten}" của bạn chưa được duyệt. Cảm ơn bạn đã gửi bài cho Ăn gì Phú Quý.';
+const DEF_DEL='Chào bạn,\nBài đăng "{ten}" của bạn đã bị gỡ khỏi Ăn gì Phú Quý. Nếu cần hỏi thêm, bạn vui lòng liên hệ admin.';
 const getSt=()=>db.collection('settings').doc('mail').get().then(d=>d.data()||{}).catch(()=>({}));
 async function sendMail(to,subject,message){
  if(!MAIL.pub||!MAIL.service||!MAIL.tpl)return 'chưa điền cấu hình MAIL (EmailJS) trong file';
@@ -181,15 +189,17 @@ async function sendMail(to,subject,message){
   body:JSON.stringify({service_id:MAIL.service,template_id:MAIL.tpl,user_id:MAIL.pub,template_params:{to_email:to,subject,message}})});
   return r.ok?'':(await r.text())}catch(e){return e.message}}
 async function notify(p,id,ok,why){const st=await getSt(),link=location.origin+location.pathname+'?p='+id;
- let body=(ok?st.ok:st.no)||(ok?DEF_OK:DEF_NO);body=body.replaceAll('{ten}',p.seller).replaceAll('{link}',link);
+ const k=ok==='del'?'del':ok?'ok':'no';
+ let body=st[k]||({ok:DEF_OK,no:DEF_NO,del:DEF_DEL})[k];body=body.replaceAll('{ten}',p.seller).replaceAll('{link}',link);
  if(why)body+='\n\nLý do: '+why;
- return sendMail(p.email,ok?'Ăn gì Phú Quý: bài đăng của bạn đã được duyệt':'Ăn gì Phú Quý: bài đăng của bạn chưa được duyệt',body)}
+ return sendMail(p.email,'Ăn gì Phú Quý: '+({ok:'bài đăng của bạn đã được duyệt',no:'bài đăng của bạn chưa được duyệt',del:'bài đăng của bạn đã bị gỡ'})[k],body)}
 async function msgView(){if(!isAdmin){app.innerHTML='<p>Chỉ admin mới dùng được mục này.</p>';return}
  const st=await getSt();
- app.innerHTML=`<h2>Lời nhắn gửi người đăng</h2><div class="box"><p class="meta">Khi bạn bấm Duyệt hoặc Từ chối, web tự gửi mail cho người đăng với nội dung dưới đây. Dùng <b>{ten}</b> = tên quán, <b>{link}</b> = link bài.</p>
+ app.innerHTML=`<h2>Lời nhắn gửi người đăng</h2><div class="box"><p class="meta">Khi bạn bấm Duyệt, Từ chối hoặc Xoá bài, web tự gửi mail cho người đăng với nội dung dưới đây. Dùng <b>{ten}</b> = tên quán, <b>{link}</b> = link bài.</p>
  <label>Lời nhắn khi DUYỆT</label><textarea id="mo" rows="6">${esc(st.ok??DEF_OK)}</textarea>
  <label>Lời nhắn khi TỪ CHỐI</label><textarea id="mn" rows="6">${esc(st.no??DEF_NO)}</textarea>
+ <label>Lời nhắn khi XOÁ bài</label><textarea id="md" rows="6">${esc(st.del??DEF_DEL)}</textarea>
  <button id="ms">Lưu lời nhắn</button> <span id="mm" class="meta"></span></div>`;
- $('#ms').onclick=async()=>{try{await db.collection('settings').doc('mail').set({ok:$('#mo').value,no:$('#mn').value});$('#mm').textContent='✅ Đã lưu'}catch(e){$('#mm').textContent='Lỗi: '+e.message}}}
+ $('#ms').onclick=async()=>{try{await db.collection('settings').doc('mail').set({ok:$('#mo').value,no:$('#mn').value,del:$('#md').value});$('#mm').textContent='✅ Đã lưu'}catch(e){$('#mm').textContent='Lỗi: '+e.message}}}
 route();
 </script></body></html>
