@@ -22,7 +22,7 @@ nav a{flex:1;text-align:center;font-size:12px;color:var(--xam);cursor:pointer;fo
 .gal{display:flex;gap:8px;overflow-x:auto;scroll-snap-type:x mandatory;margin-bottom:10px}.gal img{height:260px;border-radius:18px;scroll-snap-align:start;flex:none;max-width:92%;object-fit:cover}
 .thumbs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px}.thumbs img{width:64px;height:64px;object-fit:cover;border-radius:10px}
 .tag{display:inline-block;padding:2px 10px;border-radius:99px;background:#e3eff0;font-size:12px;font-weight:600}.tag.p{background:#ffeab3}
-.row{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0}.cm{border-top:1px solid #e3eaeb;padding:8px 0;font-size:14px}
+.cm .thumbs img{width:84px;height:84px;cursor:zoom-in}.row{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0}.cm{border-top:1px solid #e3eaeb;padding:8px 0;font-size:14px}
 </style></head><body>
 <header><div><b>🏝️ Ăn gì Phú Quý</b><small id="who">Món ngon của cô chú trên đảo</small></div><button class="sun" id="authBtn"></button></header>
 <main id="app"></main>
@@ -46,6 +46,11 @@ const fmt=t=>t&&t.toDate?t.toDate().toLocaleString('vi-VN',{hour:'2-digit',minut
 const mask=(e,full)=>{if(full||!e)return e||'';const i=e.indexOf('@');return e.slice(0,3)+'*'.repeat(Math.max(i-3,1))+e.slice(i)};
 const bad=e=>/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e||'')?false:true;
 
+const safeMap=u=>{try{const x=new URL(u);return x.protocol==='https:'&&/(^|\.)(google\.(com(\.[a-z]{2})?|co\.[a-z]{2}|[a-z]{2,3})|goo\.gl|g\.co)$/.test(x.hostname)}catch(e){return false}};
+const IMGS=a=>(a&&a.length)?'<div class="thumbs">'+a.map(i=>`<img class="zm" src="${i}">`).join('')+'</div>':'';
+document.addEventListener('click',e=>{if(e.target.classList&&e.target.classList.contains('zm')){const o=document.createElement('div');
+ o.style.cssText='position:fixed;inset:0;background:#000d;display:flex;align-items:center;justify-content:center;z-index:99';
+ o.innerHTML='<img src="'+e.target.src+'" style="max-width:96%;max-height:92%;border-radius:12px">';o.onclick=()=>o.remove();document.body.appendChild(o)}});
 let ready;const first=new Promise(r=>ready=r);
 auth.onAuthStateChanged(u=>{if(!u){auth.signInAnonymously().catch(e=>{alert('Cần bật Anonymous trong Firebase Authentication: '+e.message);ready()});return}
  user=u;isAdmin=!!u.email&&ADMINS.includes(u.email.toLowerCase());
@@ -89,25 +94,29 @@ async function detail(id,count){app.innerHTML='<p>Đang tải…</p>';
  app.innerHTML=`<button class="alt" onclick="go('${tab}')">← Quay lại</button><h2>${esc(p.seller)} ${p.status!=='approved'?'<span class="tag p">Chờ duyệt</span>':''}</h2>
  <div class="gal">${(p.images||[]).map(i=>`<img src="${i}">`).join('')}</div>
  <div class="box"><div class="meta">${stars(p.rating)}<span>👁 ${p.views||0} lượt xem</span></div>
- <p><b>🍜 Món:</b> ${esc(p.food)}<br><b>🕗 Giờ bán:</b> ${esc(p.time)}<br><b>📍 Địa chỉ:</b> ${esc(p.address)}</p>
+ <p><b>🍜 Món:</b> ${esc(p.food)}<br><b>🕗 Giờ bán:</b> ${esc(p.time)}<br><b>📍 Địa chỉ:</b> ${esc(p.address)}${p.map&&safeMap(p.map)?`<br><a href="${esc(p.map)}" target="_blank" rel="noopener">🗺️ Xem trên Google Maps</a>`:''}</p>
  <p style="white-space:pre-wrap">${esc(p.content)}</p>
  <div class="meta">Người viết: ${esc(isAdmin?(pm||p.email||''):(p.emailMask||mask(p.email)))} · Duyệt: ${fmt(p.approvedAt)||'—'}</div>
  <div class="row"><button id="bc">💬 Nhận xét</button><button class="alt" id="bl">🔗 Copy link</button><button class="alt" id="br">🚩 Yêu cầu gỡ</button>${isAdmin&&p.status==='approved'?`<button class="sun" id="bf">${p.featured?'Bỏ nổi bật':'🌟 Nổi bật'}</button>`:''}${isAdmin?'<button class="red" id="bd">🗑 Xoá bài</button>':''}</div></div>
  <div id="rf"></div><h3>Nhận xét (${cms.length})</h3>
- ${cms.map(c=>`<div class="cm">${esc(c.content)}<div class="meta">${esc(c.emailMask||mask(c.email))} · ${fmt(c.createdAt)}</div></div>`).join('')||'<p class="meta">Chưa có nhận xét nào.</p>'}`;
+ ${cms.map(c=>`<div class="cm">${esc(c.content)}${IMGS(c.images)}<div class="meta">${esc(c.emailMask||mask(c.email))} · ${fmt(c.createdAt)}</div></div>`).join('')||'<p class="meta">Chưa có nhận xét nào.</p>'}`;
  $('#bl').onclick=()=>navigator.clipboard.writeText(location.origin+location.pathname+'?p='+id).then(()=>alert('Đã copy link!'));
  $('#bc').onclick=()=>reportForm(id,'comment');$('#br').onclick=()=>reportForm(id,'remove');
  if(isAdmin)$('#bd').onclick=()=>delPost(id,true);
  if($('#bf'))$('#bf').onclick=async()=>{p.featured=!p.featured;await ref.update({featured:p.featured});$('#bf').textContent=p.featured?'Bỏ nổi bật':'🌟 Nổi bật'}}
-async function reportForm(id,type){await first;
+async function reportForm(id,type){await first;let cimgs=[];
  $('#rf').innerHTML=`<div class="box"><b>${type==='comment'?'Gửi nhận xét':'Yêu cầu gỡ bài'}</b><br><label>Nội dung *</label><textarea id="rc" rows="3"></textarea>
+ ${type==='comment'?'<label>Ảnh (không bắt buộc, tối đa 5)</label><input id="rfiles" type="file" accept="image/*" multiple><div class="thumbs" id="rth"></div>':''}
  <label>Email của bạn *</label><input id="re" type="email" placeholder="ten@gmail.com"><div class="err" id="rerr"></div><button id="rs">Gửi cho admin duyệt</button></div>`;
+ if($('#rfiles'))$('#rfiles').onchange=async e=>{for(const f of e.target.files){if(cimgs.length>=5){alert('Tối đa 5 ảnh');break}cimgs.push(await shrink(f))}e.target.value='';$('#rth').innerHTML=cimgs.map(i=>`<img src="${i}">`).join('')};
  $('#rs').onclick=async()=>{const c=$('#rc').value.trim(),e=$('#re').value.trim();
   if(!c||bad(e)){$('#rerr').textContent='Vui lòng điền nội dung và email hợp lệ.';return}
-  const rr=db.collection('reports').doc(),bt=db.batch();
-  bt.set(rr,{postId:id,type,content:c,emailMask:mask(e),uid:user.uid,status:'pending',createdAt:FV.serverTimestamp()});
-  bt.set(db.collection('mails').doc('rep_'+rr.id),{email:e});await bt.commit();
-  $('#rf').innerHTML='<div class="box">✅ Đã gửi. Admin sẽ xem xét sớm.</div>'}}
+  $('#rs').disabled=true;$('#rs').textContent='Đang gửi…';
+  try{const rr=db.collection('reports').doc(),bt=db.batch();
+   bt.set(rr,{postId:id,type,content:c,emailMask:mask(e),images:cimgs,uid:user.uid,status:'pending',createdAt:FV.serverTimestamp()});
+   bt.set(db.collection('mails').doc('rep_'+rr.id),{email:e});await bt.commit();
+   $('#rf').innerHTML='<div class="box">✅ Đã gửi. Admin sẽ xem xét sớm.</div>'}
+  catch(er){$('#rerr').textContent='Gửi lỗi: '+er.message;$('#rs').disabled=false;$('#rs').textContent='Gửi cho admin duyệt'}}}
 async function removePost(id,why){
  const [pd,md]=await Promise.all([db.collection('posts').doc(id).get(),db.collection('mails').doc('post_'+id).get()]);
  const p=pd.data()||{};p.email=md.data()?.email||p.email;
@@ -124,6 +133,7 @@ function postForm(){imgs=[];
  
  const f=(id,l,ph)=>`<label>${l} *</label><input id="${id}" placeholder="${ph}">`;
  app.innerHTML=`<h2>Đăng bài mới</h2><div class="box">${f('seller','Tên người bán','Bánh căn cô 9')}${f('food','Thực phẩm','Bánh căn')}${f('time','Thời gian bán','8:00 - 16:00')}${f('addr','Địa chỉ','123 Trần Hưng Đạo')}
+ <label>Link Google Maps (không bắt buộc)</label><input id="map" placeholder="https://maps.app.goo.gl/..."><div class="meta" style="margin:-6px 0 10px">Mở Google Maps, chọn quán, bấm Chia sẻ rồi Sao chép liên kết.</div>
  <label>Ảnh * (tối đa 5, vui lòng up ảnh chụp bằng camera thường!)</label><input id="files" type="file" accept="image/*" multiple><div class="thumbs" id="th"></div>
  <label>Nội dung bài viết *</label><textarea id="ct" rows="4"></textarea>
  <label>Đánh giá *</label><select id="rt"><option value="">Chọn số sao</option>${[5,4,3,2,1].map(n=>`<option value="${n}">${'⭐'.repeat(n)}</option>`).join('')}</select></div>
@@ -135,11 +145,13 @@ function postForm(){imgs=[];
 function shrink(file){return new Promise(r=>{const im=new Image();im.onload=()=>{const s=Math.min(1,640/Math.max(im.width,im.height)),c=document.createElement('canvas');c.width=im.width*s;c.height=im.height*s;c.getContext('2d').drawImage(im,0,0,c.width,c.height);r(c.toDataURL('image/jpeg',.55))};im.src=URL.createObjectURL(file)})}
 async function submitPost(){if(busy)return;await first;const v=id=>$('#'+id).value.trim();
  const d={seller:v('seller'),food:v('food'),time:v('time'),address:v('addr'),content:v('ct'),rating:+v('rt'),email:v('em')};
+ const map=v('map');
  const miss=Object.entries(d).some(([k,x])=>!x)||!imgs.length||bad(d.email);
+ if(map&&!safeMap(map)){$('#err').textContent='Link Google Maps không hợp lệ (phải bắt đầu bằng https:// và là link của Google Maps).';return}
  if(miss||!$('#ok').checked){$('#err').textContent='Vui lòng điền đủ tất cả mục, thêm ít nhất 1 ảnh, email hợp lệ và tick xác nhận.';return}
  busy=true;$('#send').textContent='Đang gửi…';
  try{const {email,...pub}=d,pr=db.collection('posts').doc(),bt=db.batch();
-  bt.set(pr,{...pub,emailMask:mask(email),images:imgs,uid:user.uid,status:'pending',views:0,createdAt:FV.serverTimestamp()});
+  bt.set(pr,{...pub,map,emailMask:mask(email),images:imgs,uid:user.uid,status:'pending',views:0,createdAt:FV.serverTimestamp()});
   bt.set(db.collection('mails').doc('post_'+pr.id),{email});await bt.commit();
   app.innerHTML='<div class="box"><h2>✅ Đã gửi duyệt</h2><p>Admin sẽ duyệt bài sớm. Cảm ơn bạn đã giới thiệu món ngon Phú Quý!</p><button onclick="go(\'home\')">Về trang chủ</button></div>'}
  catch(e){$('#err').textContent='Gửi lỗi (ảnh quá nặng?): '+e.message;$('#send').textContent='Gửi duyệt'}busy=false}
@@ -154,7 +166,7 @@ async function adminView(){if(!isAdmin){app.innerHTML='<p>Chỉ admin mới xem 
  const mail=(e,s)=>`<a href="mailto:${esc(e)}?subject=${encodeURIComponent(s)}">✉️ Gửi mail</a>`;
  app.innerHTML=`<h2>Quản lý</h2><h3>Nhận xét / yêu cầu gỡ chờ duyệt (${rs.length})</h3>
  ${rs.map(r=>`<div class="box"><span class="tag ${r.type==='remove'?'p':''}">${r.type==='remove'?'Yêu cầu gỡ':'Nhận xét'}</span> <a href="?p=${r.postId}" target="_blank">xem bài</a>
- <p style="white-space:pre-wrap">${esc(r.content)}</p><div class="meta">${esc(r.email)} · ${fmt(r.createdAt)} · ${mail(r.email,'Về nhận xét/yêu cầu của bạn')}</div>
+ <p style="white-space:pre-wrap">${esc(r.content)}</p>${IMGS(r.images)}<div class="meta">${esc(r.email)} · ${fmt(r.createdAt)} · ${mail(r.email,'Về nhận xét/yêu cầu của bạn')}</div>
  <div class="row"><button data-a="ok" data-id="${r.id}">Duyệt</button><button class="alt" data-a="no" data-id="${r.id}">Từ chối</button>${r.type==='remove'?`<button class="red" data-a="rm" data-id="${r.id}" data-p="${r.postId}">Gỡ bài</button>`:''}</div></div>`).join('')||'<p class="meta">Không có.</p>'}
  <h3 id="pc"></h3><input id="aq" placeholder="🔍 Tìm theo tên quán, món hoặc email người đăng…"><div id="ap"></div>`;
  const postHtml=L=>L.map(p=>`<div class="box"><b>${esc(p.seller)}</b> — ${esc(p.food)} ${stars(p.rating)} <span class="tag ${p.status==='approved'?'':'p'}">${({approved:'Đã duyệt',rejected:'Đã từ chối'})[p.status]||'Chờ duyệt'}</span>
