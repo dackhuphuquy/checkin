@@ -35,6 +35,7 @@ nav a{flex:1;text-align:center;font-size:12px;color:var(--xam);cursor:pointer;fo
 const CFG={apiKey:"AIzaSyAxrf09uXEBkcVvJdGYVd-yRaD_b1LnIhw",authDomain:"checkin-58c0f.firebaseapp.com",projectId:"checkin-58c0f",appId:"1:438940650575:web:3e65c2feb355fe2c266e3a"};          // dán từ Firebase
 const ADMINS=["duykhanh2605.pq@gmail.com"];                              // email admin (chữ thường)
 const MAIL={service:"service_icsproc",tpl:"template_i99dtth",pub:"TIdSaMWaJVowZHqq_"};   // EmailJS: Service ID, Template ID, Public Key (xem hướng dẫn)
+const NTFY="duykhanhdaophuquy";   // tên "topic" ntfy để nhận thông báo cần duyệt (đặt tên dài, khó đoán). Để trống = tắt thông báo
 const ZALO="https://zalo.me/0867812605";                             // link Zalo admin
 /* ===================================== */
 firebase.initializeApp(CFG);const auth=firebase.auth(),db=firebase.firestore(),FV=firebase.firestore.FieldValue;
@@ -51,6 +52,9 @@ const IMGS=a=>(a&&a.length)?'<div class="thumbs">'+a.map(i=>`<img class="zm" src
 document.addEventListener('click',e=>{if(e.target.classList&&e.target.classList.contains('zm')){const o=document.createElement('div');
  o.style.cssText='position:fixed;inset:0;background:#000d;display:flex;align-items:center;justify-content:center;z-index:99';
  o.innerHTML='<img src="'+e.target.src+'" style="max-width:96%;max-height:92%;border-radius:12px">';o.onclick=()=>o.remove();document.body.appendChild(o)}});
+const ping=(title,message)=>{if(!NTFY)return;
+ fetch('https://ntfy.sh',{method:'POST',headers:{'Content-Type':'application/json'},
+  body:JSON.stringify({topic:NTFY,title,message,tags:['bell'],click:location.origin+location.pathname})}).catch(()=>{})};
 let ready;const first=new Promise(r=>ready=r);
 auth.onAuthStateChanged(u=>{if(!u){auth.signInAnonymously().catch(e=>{alert('Cần bật Anonymous trong Firebase Authentication: '+e.message);ready()});return}
  user=u;isAdmin=!!u.email&&ADMINS.includes(u.email.toLowerCase());
@@ -115,6 +119,7 @@ async function reportForm(id,type){await first;let cimgs=[];
   try{const rr=db.collection('reports').doc(),bt=db.batch();
    bt.set(rr,{postId:id,type,content:c,emailMask:mask(e),images:cimgs,uid:user.uid,status:'pending',createdAt:FV.serverTimestamp()});
    bt.set(db.collection('mails').doc('rep_'+rr.id),{email:e});await bt.commit();
+   ping(type==='comment'?'💬 Nhận xét mới chờ duyệt':'🚩 Yêu cầu gỡ bài mới',c.slice(0,80));
    $('#rf').innerHTML='<div class="box">✅ Đã gửi. Admin sẽ xem xét sớm.</div>'}
   catch(er){$('#rerr').textContent='Gửi lỗi: '+er.message;$('#rs').disabled=false;$('#rs').textContent='Gửi cho admin duyệt'}}}
 async function removePost(id,why){
@@ -153,6 +158,7 @@ async function submitPost(){if(busy)return;await first;const v=id=>$('#'+id).val
  try{const {email,...pub}=d,pr=db.collection('posts').doc(),bt=db.batch();
   bt.set(pr,{...pub,map,emailMask:mask(email),images:imgs,uid:user.uid,status:'pending',views:0,createdAt:FV.serverTimestamp()});
   bt.set(db.collection('mails').doc('post_'+pr.id),{email});await bt.commit();
+  ping('📸 Bài đăng mới chờ duyệt',pub.seller+' – '+pub.food);
   app.innerHTML='<div class="box"><h2>✅ Đã gửi duyệt</h2><p>Admin sẽ duyệt bài sớm. Cảm ơn bạn đã giới thiệu món ngon Phú Quý!</p><button onclick="go(\'home\')">Về trang chủ</button></div>'}
  catch(e){$('#err').textContent='Gửi lỗi (ảnh quá nặng?): '+e.message;$('#send').textContent='Gửi duyệt'}busy=false}
 
